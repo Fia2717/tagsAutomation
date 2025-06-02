@@ -1,0 +1,55 @@
+name: Tag Creation Workflow
+
+on:
+  push:
+    branches:
+      - '**'  # Triggers on push to any branch
+
+jobs:
+  create-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Create tag for non-main branches
+        if: github.ref != 'refs/heads/main'
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          TAG_NAME="${BRANCH_NAME}-${TIMESTAMP}"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create tag for main branch
+        if: github.ref == 'refs/heads/main'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require('child_process');
+            const tagName = process.env.TAG_NAME;
+            
+            if (!tagName) {
+              core.setFailed('TAG_NAME environment variable is required for main branch pushes');
+              return;
+            }
+            
+            try {
+              execSync(`git tag ${tagName}`);
+              execSync(`git push origin ${tagName}`);
+              console.log(`Successfully created and pushed tag: ${tagName}`);
+            } catch (error) {
+              core.setFailed(`Failed to create tag: ${error.message}`);
+            }
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag_name }} 
