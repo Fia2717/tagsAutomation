@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - '**'  # Triggers on push to any branch
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name (format: v1.0.0.0)'
+        required: true
+        type: string
 
 jobs:
   create-tag:
@@ -30,26 +36,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate tag format for main branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if [[ ! "${{ github.event.inputs.tag_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Tag name must follow the format v1.0.0.0"
+            exit 1
+          fi
+
       - name: Create tag for main branch
         if: github.ref == 'refs/heads/main'
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { execSync } = require('child_process');
-            const tagName = process.env.TAG_NAME;
-            
-            if (!tagName) {
-              core.setFailed('TAG_NAME environment variable is required for main branch pushes');
-              return;
-            }
-            
-            try {
-              execSync(`git tag ${tagName}`);
-              execSync(`git push origin ${tagName}`);
-              console.log(`Successfully created and pushed tag: ${tagName}`);
-            } catch (error) {
-              core.setFailed(`Failed to create tag: ${error.message}`);
-            }
+        run: |
+          TAG_NAME="${{ github.event.inputs.tag_name }}"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+          echo "Created and pushed tag: $TAG_NAME"
         env:
-          TAG_NAME: ${{ github.event.inputs.tag_name }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
